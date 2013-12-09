@@ -16,7 +16,7 @@
 #include "vtkPlaneSource.h"
 #include "vtkTriangle.h"
 
-#include <vtkstd/set>
+#include <set>
 
 #include "vtkRANSACPlane.h"
 
@@ -111,7 +111,7 @@ int vtkRANSACPlane::RequestData(vtkInformation *vtkNotUsed(request),
 
     for (unsigned int iter = 0; iter < MaxIterations; iter++) {
         //pick NumPointsToFit random indices
-        vtkstd::vector<unsigned int> randomIndices = UniqueRandomIndices(input->GetNumberOfPoints(), NumPointsToFit);
+        std::vector<unsigned int> randomIndices = UniqueRandomIndices(input->GetNumberOfPoints(), NumPointsToFit);
 
         vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
         ExtractPoints(input, randomIndices, points);
@@ -257,7 +257,7 @@ std::vector<unsigned int> vtkRANSACPlane::DetermineInliers(vtkPoints* points, vt
 ///////////////////////////////////////
 ////////// Helper Functions /////////////
 ////////////////////////////////////////
-vtkstd::vector<unsigned int> UniqueRandomIndices(const unsigned int maxIndex, const unsigned int numIndices)
+std::vector<unsigned int> UniqueRandomIndices(const unsigned int maxIndex, const unsigned int numIndices)
 {
   //generate Number unique random indices from 0 to MAX
 
@@ -269,7 +269,7 @@ vtkstd::vector<unsigned int> UniqueRandomIndices(const unsigned int maxIndex, co
       return indices;
    }
 		
-   vtkstd::set<unsigned int> S;
+   std::set<unsigned int> S;
    while(S.size() < numIndices)
    {
       S.insert(vtkMath::Random(0, maxIndex));
@@ -283,7 +283,7 @@ vtkstd::vector<unsigned int> UniqueRandomIndices(const unsigned int maxIndex, co
    return indices;
 }
 
-void ExtractPoints(vtkPointSet* points, vtkstd::vector<unsigned int> indices, vtkPoints* output)
+void ExtractPoints(vtkPointSet* points, const std::vector<unsigned int>& indices, vtkPoints* output)
 {
     for(unsigned int i = 0; i < indices.size(); i++) {
         double p[3];

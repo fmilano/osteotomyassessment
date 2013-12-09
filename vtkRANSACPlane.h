@@ -9,7 +9,7 @@
 
 #include "vtkPolyDataAlgorithm.h" //superclass
 
-#include <vtkstd/vector>
+#include <vector>
 
 class vtkPolyData;
 class vtkPlane;
@@ -72,15 +72,15 @@ class vtkRANSACPlane : public vtkPolyDataAlgorithm
    unsigned int NumPointsToFit; //how many points to pick and fit a plane to in each iteration
    double GoodEnough; //The percentage of the data that is fit to consider the model "good enough"
    
-   vtkstd::vector<unsigned int> DetermineInliers(vtkPoints* points, vtkPlane* plane);
+   std::vector<unsigned int> DetermineInliers(vtkPoints* points, vtkPlane* plane);
    
    vtkSmartPointer<vtkPlane> BestPlane;
    double Bounds[6];
 };
 
 ////////// Helper Functions /////////////
-vtkstd::vector<unsigned int> UniqueRandomIndices(const unsigned int maxIndex, const unsigned int numIndices);
-void ExtractPoints(vtkPointSet* polydata, vtkstd::vector<unsigned int> indices, vtkPoints* output);
+std::vector<unsigned int> UniqueRandomIndices(const unsigned int maxIndex, const unsigned int numIndices);
+void ExtractPoints(vtkPointSet* polydata, const std::vector<unsigned int>& indices, vtkPoints* output);
 void BestFitPlane(vtkPoints *points, vtkPlane *BestPlane);
 void CopyPlane(vtkPlane* plane, vtkPlane* output);
 void CenterOfMass(vtkPoints* points, double* center);
