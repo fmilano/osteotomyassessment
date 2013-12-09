@@ -18,14 +18,14 @@
 
 #include <set>
 
-#include "vtkRANSACPlane.h"
+#include "vtkLORANSACPlane.h"
 
-vtkStandardNewMacro(vtkRANSACPlane);
-vtkCxxRevisionMacro(vtkRANSACPlane, "$Revision$");
+vtkStandardNewMacro(vtkLORANSACPlane);
+vtkCxxRevisionMacro(vtkLORANSACPlane, "$Revision$");
 
 
 //-----------------------------------------------------------------------------
-vtkRANSACPlane::vtkRANSACPlane()
+vtkLORANSACPlane::vtkLORANSACPlane()
 {
   this->InlierThreshold = 1.0;
   this->MaxIterations = 1000;
@@ -38,32 +38,32 @@ vtkRANSACPlane::vtkRANSACPlane()
 
 
 //-----------------------------------------------------------------------------
-vtkRANSACPlane::~vtkRANSACPlane()
+vtkLORANSACPlane::~vtkLORANSACPlane()
 {
 }
 
 
 //----------------------------------------------------------------------------
-void vtkRANSACPlane::AddSourceConnection(vtkAlgorithmOutput* input)
+void vtkLORANSACPlane::AddSourceConnection(vtkAlgorithmOutput* input)
 {
   this->AddInputConnection(1, input);
 }
 
 
 //----------------------------------------------------------------------------
-void vtkRANSACPlane::RemoveAllSources()
+void vtkLORANSACPlane::RemoveAllSources()
 {
   this->SetInputConnection(1, 0);
 }
 
 //----------------------------------------------------------------------------
-vtkPolyData* vtkRANSACPlane::GetOutput()
+vtkPolyData* vtkLORANSACPlane::GetOutput()
 {
   return vtkPolyData::SafeDownCast(this->GetOutputDataObject(0));
 }
 
 //----------------------------------------------------------------------------
-int vtkRANSACPlane::FillInputPortInformation( int port, vtkInformation* info )
+int vtkLORANSACPlane::FillInputPortInformation( int port, vtkInformation* info )
 {
   if (!this->Superclass::FillInputPortInformation(port, info))
     {
@@ -77,7 +77,7 @@ int vtkRANSACPlane::FillInputPortInformation( int port, vtkInformation* info )
   return 0;
 }
 
-void vtkRANSACPlane::SetBounds(double bounds[]) {
+void vtkLORANSACPlane::SetBounds(double bounds[]) {
    Bounds[0] = bounds[0];
    Bounds[1] = bounds[1];
    Bounds[2] = bounds[2];
@@ -87,7 +87,7 @@ void vtkRANSACPlane::SetBounds(double bounds[]) {
 }
 
 //----------------------------------------------------------------------------
-int vtkRANSACPlane::RequestData(vtkInformation *vtkNotUsed(request),
+int vtkLORANSACPlane::RequestData(vtkInformation *vtkNotUsed(request),
                               vtkInformationVector **inputVector,
                               vtkInformationVector *outputVector)
 {
@@ -224,12 +224,12 @@ int vtkRANSACPlane::RequestData(vtkInformation *vtkNotUsed(request),
     return 1;
 }
 
-void vtkRANSACPlane::PrintSelf(ostream &os, vtkIndent indent)
+void vtkLORANSACPlane::PrintSelf(ostream &os, vtkIndent indent)
 {
   this->Superclass::PrintSelf(os,indent);
 }
 
-std::vector<unsigned int> vtkRANSACPlane::DetermineInliers(vtkPoints* points, vtkPlane* plane)
+std::vector<unsigned int> vtkLORANSACPlane::DetermineInliers(vtkPoints* points, vtkPlane* plane)
 {
     //find the distance from every point to the plane
     std::vector<unsigned int> inlierIndices;
@@ -269,7 +269,7 @@ std::vector<unsigned int> UniqueRandomIndices(const unsigned int maxIndex, const
       return indices;
    }
 		
-   std::set<unsigned int> S;
+	std::set<unsigned int> S;
    while(S.size() < numIndices)
    {
       S.insert(vtkMath::Random(0, maxIndex));

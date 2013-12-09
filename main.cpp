@@ -38,109 +38,127 @@ vtkSmartPointer<vtkPlaneSource> GetPlaneParameters(vtkSmartPointer<vtkPolyData> 
                                                    vtkSmartPointer<vtkCellLocator> tree,
                                                    double Spacing);
  
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
 
    if (argc < 4) {
-      std::cerr << "Usage: " << std::endl << argv[0] << " specimen(.stl)"//argv[1]
-                                                        " planed(.stl)"//argv[2]
-                                                        " caso"//argv[3]
-                                                        //" inlier_threshold"//argv[4]
-                                                        //" manual(.stl)"//argv[5]
-                                                        //" results(.csv)"//argv[6]
+      std::cerr << "Usage: " << std::endl << argv[0] << " specimen(.stl)"                    // argv[1]
+                                                        " planned_osteotomy_virtual_plane(.stl)"   // argv[2]
+                                                        " case_id"                           // argv[3]
+                                                        " [inlier_threshold_in_mm)]"         // optional argv[4]
+                                                        " [postSx_osteotomy_virtual_plane(.stl)]"  // optional argv[5]
+                                                        " [results(.csv)]"                   // optional argv[6]
                                                         << std::endl;
       return 1;
    }
 
-   double ROIThreshold = 20;
-   double Spacing = 0.1;
-   double InlierThreshold = 0.5;
-   int MaxIterations = 5000;
+   std::string specimenFilename(argv[1]);
+   std::string plannedOsteotomyPlaneFilename(argv[2]);
+   std::string caseId(argv[3]);
 
-   //InlierThreshold = atof(argv[4]);
+   // The inlier threshold determines which points are considered to belong to the executed osteotomy plane
+   double inlierThreshold = 0.5; // mm
+   if (argc > 4)
+   {
+     inlierThreshold = atof(argv[4]);
+   }
+
+   // The postSxVirtualOsteotomy is a plane, usually set by hand, that is used to validate the algorithm
+   std::string postSxOsteotomyPlaneFilename;
+   if (argc > 5)
+   {
+     postSxOsteotomyPlaneFilename = (argv[5]);
+   }
+
+   // The results file contains the error distance for each sampled point
+   std::string results("results_" + caseId + ".csv");
+   if (argc > 6)
+   {
+      results = argv[6];
+   }
+
+   // RANSAC maximum interations
+   int maxIterations = 5000;
+   // Maximum distance considered when ray casting over the specimen (in mm)
+   double regionOfInterestThreshold = 20;
+   // Spacing of the plane resampling (in mm)
+   double spacing = 0.1;
+
 
    std::cout << "**************************************************************"
                 "******************" << std::endl;
-   std::cout << "Specimen: " << argv[1] << " Plane: " << argv[2] << std::endl;
-   std::cout << "Inlier threshold: " << InlierThreshold << std::endl;
+   std::cout << "Specimen: " << specimenFilename << " Planned Osteotomy Virtual Plane: " << plannedOsteotomyVirtualPlaneFilename << std::endl;
+   std::cout << "Inlier threshold: " << inlierThreshold << std::endl;
 
    std::cout << "--------------------------------------------------------------"
                 "------------------" << std::endl;
 
-   vtkSmartPointer<vtkSTLReader> pieceReader = vtkSmartPointer<vtkSTLReader>::New();
-   pieceReader->SetFileName(argv[1]);
-   pieceReader->Update();
+   vtkSmartPointer<vtkSTLReader> specimenReader = vtkSmartPointer<vtkSTLReader>::New();
+   specimenReader->SetFileName(specimenFilename);
+   specimenReader->Update();
 
-   vtkSmartPointer<vtkPolyData> inputPiece = pieceReader->GetOutput();
+   vtkSmartPointer<vtkPolyData> specimen = pieceReader->GetOutput();
 
-   vtkSmartPointer<vtkSTLReader> planeReader = vtkSmartPointer<vtkSTLReader>::New();
-   planeReader->SetFileName(argv[2]);
-   planeReader->Update();
+   vtkSmartPointer<vtkSTLReader> plannedOsteotomyPlaneReader = vtkSmartPointer<vtkSTLReader>::New();
+   plannedOsteotomyPlaneReader->SetFileName(plannedOsteotomyPlaneFilename);
+   plannedOsteotomyPlaneReader->Update();
 
-  vtkSmartPointer<vtkPolyData> inputPlane = planeReader->GetOutput();
+  vtkSmartPointer<vtkPolyData> plannedOsteotomyPlane = plannedOsteotomyPlaneReader->GetOutput();
 
-  /*vtkSmartPointer<vtkSTLReader> manualReader = vtkSmartPointer<vtkSTLReader>::New();
-  manualReader->SetFileName(argv[5]);
-  manualReader->Update();
-
- vtkSmartPointer<vtkPolyData> inputManualPlane = manualReader->GetOutput();
-*/
-
+  /////////////////////////////////////////////////////////////////////////////
+  // Calculates plane parameters
+  /////////////////////////////////////////////////////////////////////////////
 
    // Generates a tree to look for the cells
    vtkSmartPointer<vtkOBBTree2> tree = vtkSmartPointer<vtkOBBTree2>::New();
-   tree->SetDataSet(inputPiece);
+   tree->SetDataSet(specimen);
    tree->BuildLocator();
 
-   vtkSmartPointer<vtkCellLocator> tree2 = vtkSmartPointer<vtkCellLocator>::New();
-   tree2->SetDataSet(inputPiece);
-   tree2->BuildLocator();
+   vtkSmartPointer<vtkCellLocator> cellLocator = vtkSmartPointer<vtkCellLocator>::New();
+   cellLocator->SetDataSet(specimen);
+   cellLocator->BuildLocator();
 
-   vtkSmartPointer<vtkPlaneSource> planeSource = GetPlaneParameters(inputPlane,
+   // The planned osteotomy plane is a thick plane, so we need a cellLocator to localize the cell
+   // of the specimen that is closest to the plane; then we can return the closest face of the plane.
+   vtkSmartPointer<vtkPlaneSource> planeSource = GetPlaneParameters(plannedOsteotomyPlane,
                                                                     true,
-                                                                    tree2,
-                                                                    Spacing);
+                                                                    cellLocator,
+                                                                    spacing);
 
    vtkSmartPointer<vtkPolyData> planeData = planeSource->GetOutput();
 
-   /*vtkSmartPointer<vtkPlaneSource> manualPlane = GetPlaneParameters(inputManualPlane,
-                                                                    false,
-                                                                    tree2,
-                                                                    Spacing);
-*/
    /////////////////////////////////////////////////////////////////////////////
    // Project points
    /////////////////////////////////////////////////////////////////////////////
    vtkSmartPointer<vtkPoints> intersectedPoints = vtkSmartPointer<vtkPoints>::New();
-
    vtkSmartPointer<vtkIdList> intersectedCellsId = vtkSmartPointer<vtkIdList>::New();
 
    vtkSmartPointer<vtkFloatArray> distances = vtkSmartPointer<vtkFloatArray>::New();
    distances->SetNumberOfComponents(1);
    distances->SetName("Distances");
 
-   Project(inputPiece, planeData, planeSource->GetNormal(), ROIThreshold, intersectedPoints, intersectedCellsId, distances);
+   Project(specimen, planeData, planeSource->GetNormal(), regionOfInterestThreshold, intersectedPoints, intersectedCellsId, distances);
 
    /////////////////////////////////////////////////////////////////////////////
    // Prune with RANSAC
    /////////////////////////////////////////////////////////////////////////////
-   vtkSmartPointer<vtkPolyData> ps = vtkSmartPointer<vtkPolyData>::New();
-   ps->SetPoints(intersectedPoints);
-   ps->Update();
+   vtkSmartPointer<vtkPolyData> executedOsteotomyPointCloud = vtkSmartPointer<vtkPolyData>::New();
+   executedOsteotomyPointCloud->SetPoints(intersectedPoints);
+   executedOsteotomyPointCloud->Update();
 
    vtkSmartPointer<vtkRANSACPlane> ransacPlane = vtkSmartPointer<vtkRANSACPlane>::New();
-   ransacPlane->SetInput(ps);
+   ransacPlane->SetInput(executedOsteotomyPointCloud);
 
    double bounds[6];
    planeData->ComputeBounds();
    planeData->GetBounds(bounds);
 
    ransacPlane->SetBounds(bounds);
-   ransacPlane->SetInlierThreshold(InlierThreshold);
-   ransacPlane->SetMaxIterations(MaxIterations);
+   ransacPlane->SetInlierThreshold(inlierThreshold);
+   ransacPlane->SetMaxIterations(maxIterations);
    ransacPlane->Update();
 
    /////////////////////////////////////////////////////////////////////////////
-   // Colorimetry
+   // Create colorimetry
    /////////////////////////////////////////////////////////////////////////////
    vtkSmartPointer<vtkPolyData> colorimetry = vtkSmartPointer<vtkPolyData>::New();
    colorimetry->ShallowCopy(inputPiece);
@@ -155,8 +173,7 @@ int main(int argc, char *argv[]) {
        colorData->SetValue(i, std::numeric_limits<float>::quiet_NaN());
 
 
-
-   // Paint all the positive distances (non SxPiece side); is helps visualization
+   // Paint all the positive distances (non specimen side); is helps visualization
    for (vtkIdType i = 0; i < distances->GetNumberOfTuples(); i++) {
         float distance = distances->GetValue(i);
         if (distance > 0)
@@ -187,6 +204,13 @@ int main(int argc, char *argv[]) {
    vtkMath::Normalize(nRansac);
    //vtkMath::Normalize(nManual);
    vtkMath::Normalize(nInput);
+
+   /*vtkSmartPointer<vtkSTLReader> manualReader = vtkSmartPointer<vtkSTLReader>::New();
+   manualReader->SetFileName(argv[5]);
+   manualReader->Update();
+
+  vtkSmartPointer<vtkPolyData> inputManualPlane = manualReader->GetOutput();
+ */
 
   /* double angleInputRansac = acos(vtkMath::Dot(nInput, nRansac))*180.0/M_PI;
    angleInputRansac = (angleInputRansac >= 90 ? 180 - angleInputRansac : angleInputRansac);
@@ -260,9 +284,9 @@ int main(int argc, char *argv[]) {
 // Extract one side of the plane
 /////////////////////////////////////////////////////////////////////////////
 vtkSmartPointer<vtkPlaneSource> GetPlaneParameters(vtkSmartPointer<vtkPolyData> inputPlane,
-                                                   bool isInputPlane,
+                                                   bool isThick,
                                                    vtkSmartPointer<vtkCellLocator> tree,
-                                                   double Spacing) {
+                                                   double spacing) {
 
    double maxArea = 0;
    double maxp0[3], maxp1[3], maxp2[3];

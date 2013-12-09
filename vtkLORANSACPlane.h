@@ -2,8 +2,8 @@
 // LO-RANSAC. Based on RANSAC by David Doria
 
 
-#ifndef __vtkRANSACPlane_h
-#define __vtkRANSACPlane_h
+#ifndef __vtkLORANSACPlane_h
+#define __vtkLORANSACPlane_h
 
 #include <vtkSmartPointer.h>
 
@@ -18,31 +18,31 @@ class vtkPoints;
 class vtkInformation;
 class vtkInformationVector;
 
-class vtkRANSACPlane : public vtkPolyDataAlgorithm
+class vtkLORANSACPlane : public vtkPolyDataAlgorithm
 {
- public:
-   static vtkRANSACPlane *New();
-   vtkTypeRevisionMacro(vtkRANSACPlane, vtkPolyDataAlgorithm);
-  void PrintSelf(ostream &os, vtkIndent indent);
+public:
+   static vtkLORANSACPlane *New();
+   vtkTypeRevisionMacro(vtkLORANSACPlane, vtkPolyDataAlgorithm);
+   void PrintSelf(ostream &os, vtkIndent indent);
 
    std::vector<unsigned int> MaxInlierIndices;
 
-  // Description:
-  // Specify the source object. This is the object that will be moved during the transformation.
-  vtkPolyData *GetSource();
+   // Description:
+   // Specify the source object. This is the object that will be moved during the transformation.
+   vtkPolyData *GetSource();
 
-  // Description:
-  // Specify the target object. This is the object that will stay in place.
-  vtkPolyData *GetTarget();
+   // Description:
+   // Specify the target object. This is the object that will stay in place.
+   vtkPolyData *GetTarget();
 
-  void AddSourceConnection(vtkAlgorithmOutput* input);
-  void RemoveAllSources();
+   void AddSourceConnection(vtkAlgorithmOutput* input);
+   void RemoveAllSources();
 
-  vtkSmartPointer<vtkPlane> GetBestPlane() { return BestPlane; }
+   vtkSmartPointer<vtkPlane> GetBestPlane() { return BestPlane; }
 
-  vtkPolyData* GetOutput();
+   vtkPolyData* GetOutput();
 
-  void SetBounds(double bounds[]);
+   void SetBounds(double bounds[]);
 
   //double RandomPoint0[3];
   //double RandomPoint1[3];
@@ -58,8 +58,8 @@ class vtkRANSACPlane : public vtkPolyDataAlgorithm
   vtkGetMacro(GoodEnough, double);
   
  protected:
-   vtkRANSACPlane();
-   ~vtkRANSACPlane();
+   vtkLORANSACPlane();
+   ~vtkLORANSACPlane();
 
   int FillInputPortInformation( int port, vtkInformation* info );
     
