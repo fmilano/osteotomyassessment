@@ -10,7 +10,7 @@ INCLUDE(${ITK_USE_FILE})
 
 ADD_EXECUTABLE(OsteotomyAssessment
 main.cpp
-vtkRANSACPlane.cxx
+vtkLORANSACPlane.cxx
 vtkOBBTree2.cxx
 Projection.cxx)
 TARGET_LINK_LIBRARIES(OsteotomyAssessment ${QT_LIBRARIES} vtkCommon vtkIO vtkHybrid)

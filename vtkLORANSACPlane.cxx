@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cmath>
+#include <ctime>
 
 #include "vtkObjectFactory.h" //for new() macro
 #include "vtkInformation.h"
@@ -16,12 +17,13 @@
 #include "vtkPlaneSource.h"
 #include "vtkTriangle.h"
 
+
 #include <set>
 
 #include "vtkLORANSACPlane.h"
 
-vtkStandardNewMacro(vtkLORANSACPlane);
-vtkCxxRevisionMacro(vtkLORANSACPlane, "$Revision$");
+vtkStandardNewMacro(vtkLORANSACPlane)
+vtkCxxRevisionMacro(vtkLORANSACPlane, "$Revision$")
 
 
 //-----------------------------------------------------------------------------
@@ -34,8 +36,9 @@ vtkLORANSACPlane::vtkLORANSACPlane()
   
   this->SetNumberOfInputPorts( 1 );
   this->SetNumberOfOutputPorts( 1 );
-}
 
+  this->randomSequence = vtkSmartPointer<vtkMinimalStandardRandomSequence>::New();
+}
 
 //-----------------------------------------------------------------------------
 vtkLORANSACPlane::~vtkLORANSACPlane()
@@ -91,137 +94,129 @@ int vtkLORANSACPlane::RequestData(vtkInformation *vtkNotUsed(request),
                               vtkInformationVector **inputVector,
                               vtkInformationVector *outputVector)
 {
-    // get the info objects
-    vtkInformation *inInfo = inputVector[0]->GetInformationObject(0);
-    vtkInformation *outInfo = outputVector->GetInformationObject(0);
+  // get the info objects
+  vtkInformation *inInfo = inputVector[0]->GetInformationObject(0);
+  vtkInformation *outInfo = outputVector->GetInformationObject(0);
 
-    // get the input and output
-    vtkPointSet *input = vtkPointSet::SafeDownCast(inInfo->Get(vtkDataObject::DATA_OBJECT()));
-    vtkPolyData *output = vtkPolyData::SafeDownCast(outInfo->Get(vtkDataObject::DATA_OBJECT()));
+  // get the input and output
+  vtkPointSet *input = vtkPointSet::SafeDownCast(inInfo->Get(vtkDataObject::DATA_OBJECT()));
+  vtkPolyData *output = vtkPolyData::SafeDownCast(outInfo->Get(vtkDataObject::DATA_OBJECT()));
 
-    //track best model
-    //vtkSmartPointer<vtkPlane> bestPlane = vtkSmartPointer<vtkPlane>::New();
-    BestPlane = vtkSmartPointer<vtkPlane>::New();
+  //track best model
+  BestPlane = vtkSmartPointer<vtkPlane>::New();
 
-    //track number of inliers of best model
-    unsigned int maxInliers = 0;
+  //track number of inliers of best model
+  unsigned int maxInliers = 0;
 
-    //seed the random number gererator
-    // !!! ///
+  //seed the random number gererator
+  randomSequence->SetSeed(static_cast<int>(time(NULL)));
 
-    for (unsigned int iter = 0; iter < MaxIterations; iter++) {
-        //pick NumPointsToFit random indices
-        std::vector<unsigned int> randomIndices = UniqueRandomIndices(input->GetNumberOfPoints(), NumPointsToFit);
+  for (unsigned int iter = 0; iter < MaxIterations; iter++)
+  {
+    //pick NumPointsToFit random indices
+    std::vector<unsigned int> randomIndices = UniqueRandomIndices(input->GetNumberOfPoints(), NumPointsToFit);
 
-        vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
-        ExtractPoints(input, randomIndices, points);
+    vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
+    ExtractPoints(input, randomIndices, points);
 
-        //find the best plane through these random points
-        vtkSmartPointer<vtkPlane> plane = vtkSmartPointer<vtkPlane>::New();
-        //BestFitPlane(points, plane);
-        // -------------------------------
-        // Calculates the best fit plane
-        double p0[3], p1[3], p2[3];
-        input->GetPoint(randomIndices[0], p0);
-        input->GetPoint(randomIndices[1], p1);
-        input->GetPoint(randomIndices[2], p2);
+    //find the best plane through these random points
+    vtkSmartPointer<vtkPlane> plane = vtkSmartPointer<vtkPlane>::New();
 
-        double normal[3];
-        vtkTriangle::ComputeNormal(p0, p1, p2, normal);
+    // Calculates the best fitting plane
+    double p0[3], p1[3], p2[3];
+    input->GetPoint(randomIndices[0], p0);
+    input->GetPoint(randomIndices[1], p1);
+    input->GetPoint(randomIndices[2], p2);
 
-        plane->SetNormal(normal);
-        plane->SetOrigin(p0);
+    double normal[3];
+    vtkTriangle::ComputeNormal(p0, p1, p2, normal);
 
-        // -------------------------------
+    plane->SetNormal(normal);
+    plane->SetOrigin(p0);
 
-        std::vector<unsigned int> inlierIndices = DetermineInliers(input->GetPoints(), plane);
+    // Given this plane, calculate the inliers
+    std::vector<unsigned int> inlierIndices = DetermineInliers(input->GetPoints(), plane);
+    if (inlierIndices.size() > maxInliers)
+    {
+      // Save model
+      maxInliers = inlierIndices.size();
+      CopyPlane(plane, BestPlane);
+      MaxInlierIndices = inlierIndices;
 
-        if (inlierIndices.size() > maxInliers) {
+      // Run local optimization
+      vtkSmartPointer<vtkPoints> inliers = vtkSmartPointer<vtkPoints>::New();
+      ExtractPoints(input, inlierIndices, inliers);
 
-            // save model
-            maxInliers = inlierIndices.size();
-            CopyPlane(plane, BestPlane);
-            MaxInlierIndices = inlierIndices;
+      BestFitPlane(inliers, plane);
+      inlierIndices = DetermineInliers(input->GetPoints(), plane);
 
-            // Run local optimization
-            vtkSmartPointer<vtkPoints> inliers = vtkSmartPointer<vtkPoints>::New();
-            ExtractPoints(input, inlierIndices, inliers);
+      if (inlierIndices.size() > maxInliers) {
+          //std::cerr << "Optimizing!" << std::endl;
 
-            BestFitPlane(inliers, plane);
-            inlierIndices = DetermineInliers(input->GetPoints(), plane);
-
-            // save optimized model
-            if (inlierIndices.size() > maxInliers) {
-                std::cerr << "Optimizing!" << std::endl;
-
-                maxInliers = inlierIndices.size();
-                CopyPlane(plane, BestPlane);
-                MaxInlierIndices = inlierIndices;
-            }
-        }
-
-        if(inlierIndices.size() > input->GetNumberOfPoints() * GoodEnough) //if GoodEnough % of the points fit the model, we can stop the search
-        {
-            break;
-        }
-
-    } //end ransac loop
-
-    /*cout << "Best plane: " << endl << "---------------" << endl;
-    cout << "Total points: " << input->GetNumberOfPoints() << endl;
-    cout << "Inliers: " << maxInliers << endl;
-    */
-    double n[3];
-    BestPlane->GetNormal(n);
-
-    //double bounds[6];
-    //input->ComputeBounds();
-    //input->GetBounds(bounds);
-    double minBound[3];
-    minBound[0] = Bounds[0];
-    minBound[1] = Bounds[2];
-    minBound[2] = Bounds[4];
-    double maxBound[3];
-    maxBound[0] = Bounds[1];
-    maxBound[1] = Bounds[3];
-    maxBound[2] = Bounds[5];
-
-    int index = 0;
-    if (fabs(Bounds[index] - Bounds[index + 1]) < fabs(Bounds[2] - Bounds[3])) {
-        index = 2;
-    }
-    if (fabs(Bounds[index] - Bounds[index + 1]) < fabs(Bounds[4] - Bounds[5])) {
-        index = 4;
+          // Save optimized model
+          maxInliers = inlierIndices.size();
+          CopyPlane(plane, BestPlane);
+          MaxInlierIndices = inlierIndices;
+      }
     }
 
-    double origin[3];
-    origin[0] = Bounds[1];
-    origin[1] = Bounds[3];
-    origin[2] = Bounds[5];
+    if(inlierIndices.size() > input->GetNumberOfPoints() * GoodEnough) //if GoodEnough % of the points fit the model, we can stop the search
+    {
+      break;
+    }
 
-    origin[index / 2] = Bounds[index];
+  } //end ransac loop
 
-    double projOrigin[3], projMin[3], projMax[3];
+  double n[3];
+  BestPlane->GetNormal(n);
 
-    BestPlane->ProjectPoint(origin, projOrigin);
-    BestPlane->ProjectPoint(minBound, projMin);
-    BestPlane->ProjectPoint(maxBound, projMax);
+  double minBound[3];
+  minBound[0] = Bounds[0];
+  minBound[1] = Bounds[2];
+  minBound[2] = Bounds[4];
+  double maxBound[3];
+  maxBound[0] = Bounds[1];
+  maxBound[1] = Bounds[3];
+  maxBound[2] = Bounds[5];
 
-    vtkSmartPointer<vtkPlaneSource> planeSource = vtkSmartPointer<vtkPlaneSource>::New();
-    planeSource->SetNormal(n);
-    planeSource->SetOrigin(projOrigin);
-    planeSource->SetPoint1(projMax);
-    planeSource->SetPoint2(projMin);
+  int index = 0;
+  if (fabs(Bounds[index] - Bounds[index + 1]) < fabs(Bounds[2] - Bounds[3]))
+  {
+    index = 2;
+  }
+  if (fabs(Bounds[index] - Bounds[index + 1]) < fabs(Bounds[4] - Bounds[5]))
+  {
+    index = 4;
+  }
 
-    int xresolution = std::sqrt(vtkMath::Distance2BetweenPoints(projOrigin, projMax)) / 0.5;
-    int yresolution = std::sqrt(vtkMath::Distance2BetweenPoints(projOrigin, projMin)) / 0.5;
+  double origin[3];
+  origin[0] = Bounds[1];
+  origin[1] = Bounds[3];
+  origin[2] = Bounds[5];
 
-    planeSource->SetResolution(xresolution, yresolution);
-    planeSource->Update();
+  origin[index / 2] = Bounds[index];
 
-    output->DeepCopy(planeSource->GetOutput());
+  double projOrigin[3], projMin[3], projMax[3];
 
-    return 1;
+  BestPlane->ProjectPoint(origin, projOrigin);
+  BestPlane->ProjectPoint(minBound, projMin);
+  BestPlane->ProjectPoint(maxBound, projMax);
+
+  vtkSmartPointer<vtkPlaneSource> planeSource = vtkSmartPointer<vtkPlaneSource>::New();
+  planeSource->SetNormal(n);
+  planeSource->SetOrigin(projOrigin);
+  planeSource->SetPoint1(projMax);
+  planeSource->SetPoint2(projMin);
+
+  int xresolution = std::sqrt(vtkMath::Distance2BetweenPoints(projOrigin, projMax)) / 0.5;
+  int yresolution = std::sqrt(vtkMath::Distance2BetweenPoints(projOrigin, projMin)) / 0.5;
+
+  planeSource->SetResolution(xresolution, yresolution);
+  planeSource->Update();
+
+  output->DeepCopy(planeSource->GetOutput());
+
+  return 1;
 }
 
 void vtkLORANSACPlane::PrintSelf(ostream &os, vtkIndent indent)
@@ -234,17 +229,15 @@ std::vector<unsigned int> vtkLORANSACPlane::DetermineInliers(vtkPoints* points, 
     //find the distance from every point to the plane
     std::vector<unsigned int> inlierIndices;
     for(unsigned int i = 0; i < points->GetNumberOfPoints(); i++) {
-        //double distance = fabs(vgl_distance(Plane, Points[i]));
         double point[3];
         points->GetPoint(i, point);
-        //double distance = plane->DistanceToPlane(p);
+
         double n[3];
         double o[3];
         plane->GetNormal(n);
         plane->GetOrigin(o);
 
         double distance = vtkPlane::DistanceToPlane(point, n, o);
-
         if(distance < this->InlierThreshold)
         {
            inlierIndices.push_back(i);
@@ -252,36 +245,38 @@ std::vector<unsigned int> vtkLORANSACPlane::DetermineInliers(vtkPoints* points, 
     }
 
     return inlierIndices;
-}
-    
-///////////////////////////////////////
-////////// Helper Functions /////////////
-////////////////////////////////////////
-std::vector<unsigned int> UniqueRandomIndices(const unsigned int maxIndex, const unsigned int numIndices)
+}    
+
+std::vector<unsigned int> vtkLORANSACPlane::UniqueRandomIndices(const unsigned int maxIndex, const unsigned int numIndices)
 {
   //generate Number unique random indices from 0 to MAX
 
-   std::vector<unsigned int> indices;
-  
-   //SeedRandom();
-   //cannot generate more unique numbers than than the size of the set we are sampling
-   if(!(numIndices <= maxIndex+1)) {
-      return indices;
-   }
+  std::vector<unsigned int> indices;
+   
+  //cannot generate more unique numbers than than the size of the set we are sampling
+  if(!(numIndices <= maxIndex+1))
+  {
+    return indices;
+  }
 		
-	std::set<unsigned int> S;
-   while(S.size() < numIndices)
-   {
-      S.insert(vtkMath::Random(0, maxIndex));
-   }
+  std::set<unsigned int> S;
+  while(S.size() < numIndices)
+  {
+    S.insert(static_cast<unsigned int>(randomSequence->GetRangeValue(0, maxIndex)));
+    randomSequence->Next();
+  }
 
-   for(std::set<unsigned int>::iterator iter = S.begin(); iter != S.end(); iter++)
-   {
-      indices.push_back(*iter);
-   }
+  for(std::set<unsigned int>::iterator iter = S.begin(); iter != S.end(); iter++)
+  {
+    indices.push_back(*iter);
+  }
 
-   return indices;
+  return indices;
 }
+
+///////////////////////////////////////
+////////// Helper Functions /////////////
+////////////////////////////////////////
 
 void ExtractPoints(vtkPointSet* points, const std::vector<unsigned int>& indices, vtkPoints* output)
 {
@@ -291,7 +286,6 @@ void ExtractPoints(vtkPointSet* points, const std::vector<unsigned int>& indices
         output->InsertNextPoint(p[0], p[1], p[2]);
     }
 }
-
 
 /* allocate memory for an nrow x ncol matrix */
 template<class TReal>
@@ -411,5 +405,3 @@ void CenterOfMass(vtkPoints* points, double* center)
   center[1] = center[1]/numberOfPoints;
   center[2] = center[2]/numberOfPoints;
 }
-
-

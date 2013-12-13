@@ -25,28 +25,29 @@
 #include <vtkXMLPolyDataWriter.h>
 #include <vtkCellArray.h>
 #include <vtkCellData.h>
-#include <vtkPolyDataConnectivityFilter.h>
+#include <vtkAppendPolyData.h>
+#include <vtkSphereSource.h>
 
 
 #include "vtkOBBTree2.h"
-#include "vtkRANSACPlane.h"
+#include "vtkLORANSACPlane.h"
 #include "Projection.h"
 
 
 vtkSmartPointer<vtkPlaneSource> GetPlaneParameters(vtkSmartPointer<vtkPolyData> inputPlane,
-                                                   bool isInputPlane,
-                                                   vtkSmartPointer<vtkCellLocator> tree,
-                                                   double Spacing);
+                                                   bool isInputPlane = false,
+                                                   vtkSmartPointer<vtkCellLocator> tree = 0,
+                                                   double Spacing = 0);
  
 int main(int argc, char* argv[]) {
 
    if (argc < 4) {
-      std::cerr << "Usage: " << std::endl << argv[0] << " specimen(.stl)"                    // argv[1]
-                                                        " planned_osteotomy_virtual_plane(.stl)"   // argv[2]
-                                                        " case_id"                           // argv[3]
-                                                        " [inlier_threshold_in_mm)]"         // optional argv[4]
-                                                        " [postSx_osteotomy_virtual_plane(.stl)]"  // optional argv[5]
-                                                        " [results(.csv)]"                   // optional argv[6]
+      std::cerr << "Usage: " << std::endl << argv[0] << " specimen(.stl)"                         // argv[1]
+                                                        " planned_osteotomy_virtual_plane(.stl)"  // argv[2]
+                                                        " case_id"                                // argv[3]
+                                                        " [spacing_in_mm)]"                       // optional argv[4]
+                                                        " [inlier_threshold_in_mm)]"              // optional argv[5]
+                                                        " [postSx_osteotomy_virtual_plane(.stl)]" // optional argv[6]
                                                         << std::endl;
       return 1;
    }
@@ -55,51 +56,50 @@ int main(int argc, char* argv[]) {
    std::string plannedOsteotomyPlaneFilename(argv[2]);
    std::string caseId(argv[3]);
 
-   // The inlier threshold determines which points are considered to belong to the executed osteotomy plane
-   double inlierThreshold = 0.5; // mm
+   // Spacing of the plane resampling
+   double spacing = 0.1; // mm
    if (argc > 4)
    {
-     inlierThreshold = atof(argv[4]);
+     spacing = atof(argv[4]);
+   }
+
+   // The inlier threshold determines which points are considered to belong to the executed osteotomy plane
+   double inlierThreshold = 0.5; // mm
+   if (argc > 5)
+   {
+     inlierThreshold = atof(argv[5]);
    }
 
    // The postSxVirtualOsteotomy is a plane, usually set by hand, that is used to validate the algorithm
    std::string postSxOsteotomyPlaneFilename;
-   if (argc > 5)
-   {
-     postSxOsteotomyPlaneFilename = (argv[5]);
-   }
-
-   // The results file contains the error distance for each sampled point
-   std::string results("results_" + caseId + ".csv");
    if (argc > 6)
    {
-      results = argv[6];
+     postSxOsteotomyPlaneFilename = (argv[6]);
    }
 
    // RANSAC maximum interations
    int maxIterations = 5000;
    // Maximum distance considered when ray casting over the specimen (in mm)
    double regionOfInterestThreshold = 20;
-   // Spacing of the plane resampling (in mm)
-   double spacing = 0.1;
-
-
-   std::cout << "**************************************************************"
-                "******************" << std::endl;
-   std::cout << "Specimen: " << specimenFilename << " Planned Osteotomy Virtual Plane: " << plannedOsteotomyVirtualPlaneFilename << std::endl;
-   std::cout << "Inlier threshold: " << inlierThreshold << std::endl;
 
    std::cout << "--------------------------------------------------------------"
                 "------------------" << std::endl;
+   std::cout << "Case: " << caseId << std::endl;
+   std::cout << "--------------------------------------------------------------"
+                "------------------" << std::endl;
+   std::cout << "Specimen: " << specimenFilename << std::endl;
+   std::cout << "Planned Osteotomy Virtual Plane: " << plannedOsteotomyPlaneFilename << std::endl;
+   std::cout << "Spacing: " << spacing << "mm" << std::endl;
+   std::cout << "Inlier threshold: " << inlierThreshold << "mm" << std::endl;
 
    vtkSmartPointer<vtkSTLReader> specimenReader = vtkSmartPointer<vtkSTLReader>::New();
-   specimenReader->SetFileName(specimenFilename);
+   specimenReader->SetFileName(specimenFilename.c_str());
    specimenReader->Update();
 
-   vtkSmartPointer<vtkPolyData> specimen = pieceReader->GetOutput();
+   vtkSmartPointer<vtkPolyData> specimen = specimenReader->GetOutput();
 
    vtkSmartPointer<vtkSTLReader> plannedOsteotomyPlaneReader = vtkSmartPointer<vtkSTLReader>::New();
-   plannedOsteotomyPlaneReader->SetFileName(plannedOsteotomyPlaneFilename);
+   plannedOsteotomyPlaneReader->SetFileName(plannedOsteotomyPlaneFilename.c_str());
    plannedOsteotomyPlaneReader->Update();
 
   vtkSmartPointer<vtkPolyData> plannedOsteotomyPlane = plannedOsteotomyPlaneReader->GetOutput();
@@ -107,6 +107,7 @@ int main(int argc, char* argv[]) {
   /////////////////////////////////////////////////////////////////////////////
   // Calculates plane parameters
   /////////////////////////////////////////////////////////////////////////////
+  std::cout << "Processing input data";
 
    // Generates a tree to look for the cells
    vtkSmartPointer<vtkOBBTree2> tree = vtkSmartPointer<vtkOBBTree2>::New();
@@ -126,9 +127,12 @@ int main(int argc, char* argv[]) {
 
    vtkSmartPointer<vtkPolyData> planeData = planeSource->GetOutput();
 
+   std::cout << " [ok]";
    /////////////////////////////////////////////////////////////////////////////
    // Project points
    /////////////////////////////////////////////////////////////////////////////
+   std::cout << "Projecting points";
+
    vtkSmartPointer<vtkPoints> intersectedPoints = vtkSmartPointer<vtkPoints>::New();
    vtkSmartPointer<vtkIdList> intersectedCellsId = vtkSmartPointer<vtkIdList>::New();
 
@@ -138,14 +142,17 @@ int main(int argc, char* argv[]) {
 
    Project(specimen, planeData, planeSource->GetNormal(), regionOfInterestThreshold, intersectedPoints, intersectedCellsId, distances);
 
+   std::cout << " [ok]" << std::endl;
    /////////////////////////////////////////////////////////////////////////////
    // Prune with RANSAC
    /////////////////////////////////////////////////////////////////////////////
+   std::cout << "Prunning data with LO-RANSAC";
+
    vtkSmartPointer<vtkPolyData> executedOsteotomyPointCloud = vtkSmartPointer<vtkPolyData>::New();
    executedOsteotomyPointCloud->SetPoints(intersectedPoints);
    executedOsteotomyPointCloud->Update();
 
-   vtkSmartPointer<vtkRANSACPlane> ransacPlane = vtkSmartPointer<vtkRANSACPlane>::New();
+   vtkSmartPointer<vtkLORANSACPlane> ransacPlane = vtkSmartPointer<vtkLORANSACPlane>::New();
    ransacPlane->SetInput(executedOsteotomyPointCloud);
 
    double bounds[6];
@@ -155,32 +162,83 @@ int main(int argc, char* argv[]) {
    ransacPlane->SetBounds(bounds);
    ransacPlane->SetInlierThreshold(inlierThreshold);
    ransacPlane->SetMaxIterations(maxIterations);
+   ransacPlane->SetGoodEnough(0.95);
    ransacPlane->Update();
+
+   std::vector<unsigned int> maxInlierIndices = ransacPlane->MaxInlierIndices;
+
+   std::cout << " [ok]" << std::endl;
+   std::cout << "Results:" << std::endl;
+   /////////////////////////////////////////////////////////////////////////////
+   // Create a big points STL
+   /////////////////////////////////////////////////////////////////////////////
+   std::cout << "    Saving big points STL";
+
+   std::vector<unsigned int> displayedPointsIndices;
+   vtkSmartPointer<vtkAppendPolyData> appendPolyData = vtkSmartPointer<vtkAppendPolyData>::New();
+
+   for (std::vector<unsigned int>::iterator it = maxInlierIndices.begin(); it != maxInlierIndices.end(); it++)
+   {
+     double center[3];
+     intersectedPoints->GetPoint(*it, center);
+     bool shouldDisplayPoint = true;
+     for (std::vector<unsigned int>::iterator it2 = displayedPointsIndices.begin(); it2 != displayedPointsIndices.end(); it2++)
+     {
+       double center2[3];
+       intersectedPoints->GetPoint(*it2, center2);
+
+       if (sqrt(vtkMath::Distance2BetweenPoints(center, center2)) < 1.2)
+         shouldDisplayPoint = false;
+     }
+
+     if (shouldDisplayPoint)
+     {
+       vtkSmartPointer<vtkSphereSource> sphere = vtkSmartPointer<vtkSphereSource>::New();
+       sphere->SetCenter(center);
+       sphere->SetRadius(0.7);
+       sphere->SetThetaResolution(36);
+       sphere->SetPhiResolution(36);
+       sphere->Update();
+
+       appendPolyData->AddInput(sphere->GetOutput());
+       displayedPointsIndices.push_back(*it);
+     }
+   }
+
+   appendPolyData->Update();
+
+   vtkSmartPointer<vtkSTLWriter> writer = vtkSmartPointer<vtkSTLWriter>::New();
+   writer->SetFileName((caseId + "_bigpoints.stl").c_str());
+   writer->SetInput(appendPolyData->GetOutput());
+   writer->Write();
+
+   std::cout << "[ok]" << std::endl;
 
    /////////////////////////////////////////////////////////////////////////////
    // Create colorimetry
    /////////////////////////////////////////////////////////////////////////////
+   std::cout << "    Saving colorimetry";
+
    vtkSmartPointer<vtkPolyData> colorimetry = vtkSmartPointer<vtkPolyData>::New();
-   colorimetry->ShallowCopy(inputPiece);
+   colorimetry->ShallowCopy(specimen);
 
    // Create color data
    vtkSmartPointer<vtkFloatArray> colorData = vtkSmartPointer<vtkFloatArray>::New();
    colorData->SetNumberOfComponents(1);
    colorData->SetName("Colors");
-   colorData->SetNumberOfTuples(inputPiece->GetNumberOfCells());
+   colorData->SetNumberOfTuples(specimen->GetNumberOfCells());
 
-   for (vtkIdType i = 0; i < inputPiece->GetNumberOfCells(); i++)
+   for (vtkIdType i = 0; i < specimen->GetNumberOfCells(); i++)
        colorData->SetValue(i, std::numeric_limits<float>::quiet_NaN());
 
-
-   // Paint all the positive distances (non specimen side); is helps visualization
-   for (vtkIdType i = 0; i < distances->GetNumberOfTuples(); i++) {
+   // Paint all the positive distances, even thou they are not pruned by RANSAC; it helps visualization
+   /*for (vtkIdType i = 0; i < distances->GetNumberOfTuples(); i++) {
         float distance = distances->GetValue(i);
         if (distance > 0)
             colorData->SetValue(intersectedCellsId->GetId(i), distance);
-   }
 
-   std::vector<unsigned int> maxInlierIndices = ransacPlane->MaxInlierIndices;
+   }
+   */
 
    // Color just the RANSAC computed indices
    for (std::vector<unsigned int>::iterator it = maxInlierIndices.begin(); it != maxInlierIndices.end(); it++) {
@@ -188,94 +246,108 @@ int main(int argc, char* argv[]) {
    }
 
    colorimetry->GetCellData()->SetScalars(colorData);
+
+   vtkSmartPointer<vtkXMLPolyDataWriter> xmlWriter = vtkSmartPointer<vtkXMLPolyDataWriter>::New();
+   xmlWriter->SetFileName((caseId + "_colorimetry.vtp").c_str());
+   xmlWriter->SetInput(colorimetry);
+   xmlWriter->Write();
+
+   std::cout << " [ok]" << std::endl;
       
    /////////////////////////////////////////////////////////////////////////////
-   // Results
+   // CSV results
    /////////////////////////////////////////////////////////////////////////////
-   std::cout << "Results:" << std::endl;
 
-   vtkSmartPointer<vtkPlane> bestPlane = ransacPlane->GetBestPlane();
+   std::cout << "    Saving distances";
 
-   double nInput[3], nRansac[3], nManual[3];
-   bestPlane->GetNormal(nRansac);
-   //manualPlane->GetNormal(nManual);
-   planeSource->GetNormal(nInput);
+   fstream distancesResults;
+   distancesResults.open((caseId + "_distances.csv").c_str());
+   for (std::vector<unsigned int>::iterator it = maxInlierIndices.begin(); it != maxInlierIndices.end(); it++)
+   {
+     distancesResults << distances->GetValue(*it) << std::endl;
+   }
+   distancesResults.close();
 
-   vtkMath::Normalize(nRansac);
-   //vtkMath::Normalize(nManual);
-   vtkMath::Normalize(nInput);
+   std::cout << " [ok]" << std::endl;
 
-   /*vtkSmartPointer<vtkSTLReader> manualReader = vtkSmartPointer<vtkSTLReader>::New();
-   manualReader->SetFileName(argv[5]);
-   manualReader->Update();
+   if (!postSxOsteotomyPlaneFilename.empty())
+   {
+     std::cout << "    Saving validation results";
+     vtkSmartPointer<vtkPlane> bestPlane = ransacPlane->GetBestPlane();
 
-  vtkSmartPointer<vtkPolyData> inputManualPlane = manualReader->GetOutput();
- */
+     vtkSmartPointer<vtkSTLReader> postSxOsteotomyPlaneReader = vtkSmartPointer<vtkSTLReader>::New();
+     postSxOsteotomyPlaneReader->SetFileName(postSxOsteotomyPlaneFilename.c_str());
+     postSxOsteotomyPlaneReader->Update();
 
-  /* double angleInputRansac = acos(vtkMath::Dot(nInput, nRansac))*180.0/M_PI;
-   angleInputRansac = (angleInputRansac >= 90 ? 180 - angleInputRansac : angleInputRansac);
-   double angleInputManual = acos(vtkMath::Dot(nInput, nManual))*180.0/M_PI;
-   angleInputManual = (angleInputManual >= 90 ? 180 - angleInputManual : angleInputManual);
-   std::cout << "Angle input - ransac: " << angleInputRansac << " degrees." << std::endl;
-   std::cout << "Angle input - manual: " << angleInputManual << " degrees." << std::endl;
-*/
-   // calculate distance
-   double cInput[3], cRansac[3], cManual[3]; // projInputRansac[3], projInputManual[3];
-   bestPlane->GetOrigin(cRansac);
-   //manualPlane->GetCenter(cManual);
-   planeSource->GetCenter(cInput);
+     vtkSmartPointer<vtkPolyData> postSxOsteotomyPlane = postSxOsteotomyPlaneReader->GetOutput();
+     vtkSmartPointer<vtkPlaneSource> manualPlane = GetPlaneParameters(postSxOsteotomyPlane);
 
+     double nInput[3], nRansac[3], nManual[3];
+     bestPlane->GetNormal(nRansac);
+     manualPlane->GetNormal(nManual);
+     planeSource->GetNormal(nInput);
 
+     vtkMath::Normalize(nRansac);
+     vtkMath::Normalize(nManual);
+     vtkMath::Normalize(nInput);
 
-  /* double distanceRansacInput = vtkPlane::DistanceToPlane(cInput, nRansac, cRansac);
-   double distanceManualInput = vtkPlane::DistanceToPlane(cInput, nManual, cManual);
+     double angleInputRansac = acos(vtkMath::Dot(nInput, nRansac))*180.0/M_PI;
+     angleInputRansac = (angleInputRansac >= 90 ? 180 - angleInputRansac : angleInputRansac);
+     double angleInputManual = acos(vtkMath::Dot(nInput, nManual))*180.0/M_PI;
+     angleInputManual = (angleInputManual >= 90 ? 180 - angleInputManual : angleInputManual);
+     //std::cout << "Angle input - ransac: " << angleInputRansac << " degrees." << std::endl;
+     //std::cout << "Angle input - manual: " << angleInputManual << " degrees." << std::endl;
 
-   std::cout << "Distance input - ransac: " << distanceRansacInput << " mm" << std::endl;
-   std::cout << "Distance input - manual: " << distanceManualInput << " mm" << std::endl;
+     // calculate distance
+     double cInput[3], cRansac[3], cManual[3]; // projInputRansac[3], projInputManual[3];
+     bestPlane->GetOrigin(cRansac);
+     manualPlane->GetCenter(cManual);
+     planeSource->GetCenter(cInput);
 
-   fstream results;
+     double distanceRansacInput = vtkPlane::DistanceToPlane(cInput, nRansac, cRansac);
+     double distanceManualInput = vtkPlane::DistanceToPlane(cInput, nManual, cManual);
 
-   results.open(argv[6], fstream::out | fstream::app);
+     std::cout << "Distance input - ransac: " << distanceRansacInput << " mm" << std::endl;
+     std::cout << "Distance input - manual: " << distanceManualInput << " mm" << std::endl;
 
+     fstream validationResults;
+     validationResults.open((caseId + "_validation.csv").c_str());
+     validationResults << caseId   << ", "
+             << spacing  << ","
+             << inlierThreshold  << ","
+             << angleInputManual << ","
+             << angleInputRansac << ","
+             << distanceManualInput << ","
+             << distanceRansacInput << std::endl;
 
-   results << argv[3] << ", "
-           << InlierThreshold  << ","
-           << angleInputManual << ","
-           << angleInputRansac << ","
-           << distanceManualInput << ","
-           << distanceRansacInput << std::endl;
+     validationResults.close();
+     std::cout << " [ok]" << std::endl;
+   }
 
-   results.close();
-*/
-   std::cout << "**************************************************************"
-                "******************" << std::endl;
-
+   std::cout << "    Saving found plane";
    vtkSmartPointer<vtkTriangleFilter> tf = vtkSmartPointer<vtkTriangleFilter>::New();
    tf->SetInput(ransacPlane->GetOutput());
    tf->Update();
 
-   vtkSmartPointer<vtkSTLWriter> writer = vtkSmartPointer<vtkSTLWriter>::New();
-//writer->SetFileName(std::string(argv[3]).append("_found.stl").c_str());
-   std::string foundFileName(argv[2]);
-   // remove extension
-   writer->SetFileName(foundFileName.erase(foundFileName.length() - 4).append("_found.stl").c_str());
+   writer = vtkSmartPointer<vtkSTLWriter>::New();
+   writer->SetFileName((caseId + "_found.stl").c_str());
    writer->SetInput(tf->GetOutput());
    writer->Write();
+
+   std::cout << " [ok]" << std::endl;
+   std::cout << "    Saving single side of planned plane";
 
    tf->SetInput(planeData);
    tf->Update();
 
-   std::string singleSideFileName(argv[2]);
-   vtkSmartPointer<vtkSTLWriter> writer2 = vtkSmartPointer<vtkSTLWriter>::New();
-   writer2->SetFileName(singleSideFileName.erase(singleSideFileName.length() - 4).append("_single_side.stl").c_str());
-   writer2->SetInput(tf->GetOutput());
-   writer2->Write();
+   std::string singleSideFileName(plannedOsteotomyPlaneFilename);
+   writer = vtkSmartPointer<vtkSTLWriter>::New();
+   writer->SetFileName(singleSideFileName.erase(singleSideFileName.length() - 4).append("_single_side.stl").c_str());
+   writer->SetInput(tf->GetOutput());
+   writer->Write();
 
-   std::string colorimetryFileName(argv[2]);
-   vtkSmartPointer<vtkXMLPolyDataWriter> writer3 = vtkSmartPointer<vtkXMLPolyDataWriter>::New();
-   writer3->SetFileName(colorimetryFileName.erase(colorimetryFileName.length() - 4).append("_colorimetry.vtp").c_str());
-   writer3->SetInput(colorimetry);
-   writer3->Write();
+   std::cout << " [ok]" << std::endl;
+   std::cout << "               <<<<<<<>>>>>>>" << std::endl;
 
    return 0;
 }
@@ -388,7 +460,7 @@ vtkSmartPointer<vtkPlaneSource> GetPlaneParameters(vtkSmartPointer<vtkPolyData> 
 
    planeSource->GetNormal(normal);
 
-   if (isInputPlane) {
+   if (isThick) {
       // At this point, the plane is centered in the middle of the box
       // We create two points to detect automatically if we have to flip
       // the sides
@@ -407,7 +479,7 @@ vtkSmartPointer<vtkPlaneSource> GetPlaneParameters(vtkSmartPointer<vtkPolyData> 
 
       tree->FindClosestPoint(pointFlip, closestPoint, idType, subId, distFlip);
       tree->FindClosestPoint(pointNotFlip, closestPoint, idType, subId, distNotFlip);
-      std::cout << "distFlip: " << distFlip << "; distNoFlip:" << distNotFlip << std::endl;
+      //std::cout << "distFlip: " << distFlip << "; distNoFlip:" << distNotFlip << std::endl;
       if (distFlip < distNotFlip) {
          normal[0] = -normal[0];
          normal[1] = -normal[1];
@@ -420,8 +492,8 @@ vtkSmartPointer<vtkPlaneSource> GetPlaneParameters(vtkSmartPointer<vtkPolyData> 
       planeSource->Push(1);
 
      // calculates the resolution
-     int xresolution = std::sqrt(vtkMath::Distance2BetweenPoints(projOrigin, projLateral1)) / Spacing;
-     int yresolution = std::sqrt(vtkMath::Distance2BetweenPoints(projOrigin, projLateral2)) / Spacing;
+     int xresolution = std::sqrt(vtkMath::Distance2BetweenPoints(projOrigin, projLateral1)) / spacing;
+     int yresolution = std::sqrt(vtkMath::Distance2BetweenPoints(projOrigin, projLateral2)) / spacing;
 
      planeSource->SetResolution(xresolution, yresolution);
    }

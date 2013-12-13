@@ -1,15 +1,17 @@
-//Because vtkPlane is strange, we will return as output a PolyData and provide Normal and Origin accessors.
-// LO-RANSAC. Based on RANSAC by David Doria
-
+// Because vtkPlane is strange, we will return as output a PolyData and provide Normal and Origin accessors.
+// Author: Federico Milano
+// LO-RANSAC (Locally Optimized). Based on RANSAC by David Doria
 
 #ifndef __vtkLORANSACPlane_h
 #define __vtkLORANSACPlane_h
 
-#include <vtkSmartPointer.h>
-
-#include "vtkPolyDataAlgorithm.h" //superclass
-
 #include <vector>
+
+#include <vtkSmartPointer.h>
+#include <vtkMinimalStandardRandomSequence.h>
+
+#include <vtkPolyDataAlgorithm.h> //superclass
+
 
 class vtkPolyData;
 class vtkPlane;
@@ -73,13 +75,16 @@ public:
    double GoodEnough; //The percentage of the data that is fit to consider the model "good enough"
    
    std::vector<unsigned int> DetermineInliers(vtkPoints* points, vtkPlane* plane);
+   std::vector<unsigned int> UniqueRandomIndices(const unsigned int maxIndex, const unsigned int numIndices);
    
    vtkSmartPointer<vtkPlane> BestPlane;
+
+   vtkSmartPointer<vtkMinimalStandardRandomSequence> randomSequence;
+
    double Bounds[6];
 };
 
 ////////// Helper Functions /////////////
-std::vector<unsigned int> UniqueRandomIndices(const unsigned int maxIndex, const unsigned int numIndices);
 void ExtractPoints(vtkPointSet* polydata, const std::vector<unsigned int>& indices, vtkPoints* output);
 void BestFitPlane(vtkPoints *points, vtkPlane *BestPlane);
 void CopyPlane(vtkPlane* plane, vtkPlane* output);
