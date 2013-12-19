@@ -212,7 +212,7 @@ int main(int argc, char* argv[]) {
    writer->SetInput(appendPolyData->GetOutput());
    writer->Write();
 
-   std::cout << "[ok]" << std::endl;
+   std::cout << " [ok]" << std::endl;
 
    /////////////////////////////////////////////////////////////////////////////
    // Create colorimetry
@@ -260,8 +260,8 @@ int main(int argc, char* argv[]) {
 
    std::cout << "    Saving distances";
 
-   fstream distancesResults;
-   distancesResults.open((caseId + "_distances.csv").c_str());
+   ofstream distancesResults;
+   distancesResults.open((caseId + "_distances.csv").c_str(), std::ofstream::out);
    for (std::vector<unsigned int>::iterator it = maxInlierIndices.begin(); it != maxInlierIndices.end(); it++)
    {
      distancesResults << distances->GetValue(*it) << std::endl;
@@ -310,8 +310,8 @@ int main(int argc, char* argv[]) {
      std::cout << "Distance input - ransac: " << distanceRansacInput << " mm" << std::endl;
      std::cout << "Distance input - manual: " << distanceManualInput << " mm" << std::endl;
 
-     fstream validationResults;
-     validationResults.open((caseId + "_validation.csv").c_str());
+     ofstream validationResults;
+     validationResults.open((caseId + "_validation.csv").c_str(), std::ofstream::out);
      validationResults << caseId   << ", "
              << spacing  << ","
              << inlierThreshold  << ","
