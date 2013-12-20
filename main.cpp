@@ -261,7 +261,7 @@ int main(int argc, char* argv[]) {
    std::cout << "    Saving distances";
 
    ofstream distancesResults;
-   distancesResults.open((caseId + "_distances.csv").c_str(), std::ofstream::out);
+   distancesResults.open((caseId + "_distances.csv").c_str(), std::ofstream::trunc);
    for (std::vector<unsigned int>::iterator it = maxInlierIndices.begin(); it != maxInlierIndices.end(); it++)
    {
      distancesResults << distances->GetValue(*it) << std::endl;
@@ -311,7 +311,7 @@ int main(int argc, char* argv[]) {
      std::cout << "Distance input - manual: " << distanceManualInput << " mm" << std::endl;
 
      ofstream validationResults;
-     validationResults.open((caseId + "_validation.csv").c_str(), std::ofstream::out);
+     validationResults.open((caseId + "_validation.csv").c_str(), std::ofstream::trunc);
      validationResults << caseId   << ", "
              << spacing  << ","
              << inlierThreshold  << ","
