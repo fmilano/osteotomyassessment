@@ -195,7 +195,7 @@ int main(int argc, char* argv[]) {
      {
        vtkSmartPointer<vtkSphereSource> sphere = vtkSmartPointer<vtkSphereSource>::New();
        sphere->SetCenter(center);
-       sphere->SetRadius(0.7);
+       sphere->SetRadius(0.4);
        sphere->SetThetaResolution(36);
        sphere->SetPhiResolution(36);
        sphere->Update();
